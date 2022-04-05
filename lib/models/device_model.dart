@@ -57,7 +57,7 @@ class Device {
   DeviceStatus deviceStatus = DeviceStatus.updated;
   WifiStatus wifiStatus = WifiStatus.disconnected;
 
-  late Timer updateDeviceConnection;
+  late Timer timerUpdateDeviceConnection;
   int numberOfDisconnections = 3;
   WifiNetwork? currentWifiNetwork;
   List<WifiNetwork> wifiNetworkList = [];
@@ -82,12 +82,10 @@ class Device {
     this.gateType = false,
 
   }){
-    if (int.parse(version.split(".")[0])*100 + int.parse(version.split(".")[1])*10 + int.parse(version.split(".")[0]) > 190) {
-      softwareStatus = SoftwareStatus.overUpgraded;
-    }else if (int.parse(version.split(".")[0])*100 + int.parse(version.split(".")[1])*10 + int.parse(version.split(".")[0]) == 190) {
-      softwareStatus = SoftwareStatus.upgraded;
-    }else if (int.parse(version.split(".")[0])*100 + int.parse(version.split(".")[1])*10 + int.parse(version.split(".")[0]) < 190) {
+    if (version != "1.14.0") {
       softwareStatus = SoftwareStatus.outdated;
+    }else {
+      softwareStatus = SoftwareStatus.upgraded;
     }
     if (connectedToWiFi){
       wifiStatus =WifiStatus.connected;
@@ -97,19 +95,13 @@ class Device {
 
   }
 
-  Future<bool> isConnectedLocally() async {
+  Future<bool> isSameNetwork() async {
     bool connected = false;
     WifiConfiguration wifiConfiguration = WifiConfiguration();
-    bool selfConnected = await wifiConfiguration.isConnectedToWifi(
-        "Dinamico${this.mac.substring(3).toUpperCase()}");
-    if(!selfConnected){
-      selfConnected = await wifiConfiguration.isConnectedToWifi(
-          "Gate_${this.mac.substring(3).toUpperCase()}");
-    }
+    bool selfConnected = await wifiConfiguration.isConnectedToWifi("Gate_${this.mac.substring(3).toUpperCase()}");
     if (!selfConnected) {
       if (this.ssid != "") {
-        bool localConnected = await wifiConfiguration.isConnectedToWifi(
-            this.ssid);
+        bool localConnected = await wifiConfiguration.isConnectedToWifi(this.ssid);
         if (localConnected) {
           connected = true;
         }
@@ -144,12 +136,10 @@ class Device {
           case "getv":
             print("Version: ${map["d"]["v"]}");
             this.version = map["d"]["v"];
-            if (int.parse(version.split(".")[0])*100 + int.parse(version.split(".")[1])*10  > 190) {
-              softwareStatus = SoftwareStatus.overUpgraded;
-            }else if (int.parse(version.split(".")[0])*100 + int.parse(version.split(".")[1])*10  == 190) {
-              softwareStatus = SoftwareStatus.upgraded;
-            }else if (int.parse(version.split(".")[0])*100 + int.parse(version.split(".")[1])*10  < 190) {
+            if (version != "1.14.0") {
               softwareStatus = SoftwareStatus.outdated;
+            }else {
+              softwareStatus = SoftwareStatus.upgraded;
             }
             break;
           case "gettype":

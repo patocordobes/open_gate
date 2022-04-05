@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:open_gate/models/message_manager_model.dart';
+import 'package:open_gate/manager/device_manager.dart';
 import 'package:open_gate/models/models.dart';
 import 'package:open_gate/repository/models_repository.dart';
 import 'package:flutter/material.dart';
@@ -8,51 +8,53 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 
-class DeviceSettingsPage extends StatefulWidget {
-  const DeviceSettingsPage({Key? key,  this.create = true}) : super(key: key);
+class ChangeNamePage extends StatefulWidget {
+  const ChangeNamePage({Key? key,  this.create = true}) : super(key: key);
 
   final bool create;
 
 
   @override
-  State<DeviceSettingsPage> createState() => _DeviceSettingsPageState();
+  State<ChangeNamePage> createState() => _ChangeNamePageState();
 }
 
-class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
-
-  bool isLoaded = false;
+class _ChangeNamePageState extends State<ChangeNamePage> {
   ModelsRepository modelsRepository = ModelsRepository();
   late Device device;
-  late MessageManager messageManager;
-  late Timer timer;
+  late DeviceManager deviceManager;
+  late Timer timerGetting;
   late Timer timerRedirect ;
-  bool _obscureText = false;
   final _formKey = GlobalKey<FormState>();
   TextEditingController _deviceNameController = TextEditingController();
-  TextEditingController _devicePasswordController = TextEditingController();
-  bool changed = true;
+  bool isLoaded = false;
+
+  void initTimer(){
+    timerGetting = Timer.periodic(Duration(seconds:10), (timer) async  {
+      if (device.connectionStatus != ConnectionStatus.disconnected) {
+        device.deviceStatus = DeviceStatus.updating;
+        Map <String, dynamic> map = {
+          "t": "devices/" + device.mac.toUpperCase().substring(3),
+          "a": "get",
+        };
+        deviceManager.send(jsonEncode(map), true);
+        deviceManager.send(jsonEncode(map), false);
+      }
+    });
+  }
 
   @override
   void initState() {
+    _deviceNameController..text = "Nombre";
     super.initState();
-    timerRedirect = Timer.periodic(Duration(seconds:40), (timer) { });
-    messageManager = context.read<MessageManager>();
+    deviceManager = context.read<DeviceManager>();
     if (widget.create){
-      device = messageManager.newDevice;
+      device = deviceManager.newDevice;
     }else {
-      device = messageManager.selectedDevice;
+      device = deviceManager.selectedDevice;
     }
-    refresh();
-    timer = Timer.periodic(Duration(milliseconds:1), (timer) async  {
-      if (device.connectionStatus != ConnectionStatus.disconnected) {
-        if (device.connectionStatus != ConnectionStatus.local && device.connectionStatus != ConnectionStatus.updating) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Solo puedes editar esto en local'),backgroundColor:Theme.of(context).errorColor),
-          );
-          Navigator.of(context).pop();
-        }
-      }else{
+    initTimer();
+    timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) async  {
+      if (device.connectionStatus == ConnectionStatus.disconnected) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('Se ha perdido la conexión con el dispositivo!'),backgroundColor:Theme.of(context).errorColor),
@@ -62,28 +64,8 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
     });
   }
   void refresh() async {
-    if (device.connectionStatus != ConnectionStatus.disconnected) {
-      if (device.connectionStatus != ConnectionStatus.local && device.connectionStatus != ConnectionStatus.updating) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Solo puedes editar esto en local'),backgroundColor:Theme.of(context).errorColor),
-        );
-        Navigator.of(context).pop();
-      }else{
-        device.deviceStatus = DeviceStatus.updating;
-        Map <String, dynamic> map = {
-          "t": "devices/" + device.mac.toUpperCase().substring(3),
-          "a": "get",
-        };
-        messageManager.send(jsonEncode(map), true);
-      }
-    }else{
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Se ha perdido la conexión con el porton!'),backgroundColor:Theme.of(context).errorColor),
-      );
-      Navigator.of(context).pop();
-    }
+    timerGetting.cancel();
+    initTimer();
   }
   @override
   void setState(fn) {
@@ -93,31 +75,31 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
   }
   @override
   void dispose() {
-    timer.cancel();
+    timerGetting.cancel();
+    timerRedirect.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    messageManager = context.watch<MessageManager>();
+    deviceManager = context.watch<DeviceManager>();
     if (widget.create){
-      device = messageManager.newDevice;
+      device = deviceManager.newDevice;
     }else {
-      device = messageManager.selectedDevice;
+      device = deviceManager.selectedDevice;
     }
     if(device.deviceStatus == DeviceStatus.updating) {
       isLoaded = false;
     }else{
       isLoaded = true;
     }
-    if (changed) {
+    if (_deviceNameController.text == "Nombre" ) {
+
       _deviceNameController..text = device.name;
-      _devicePasswordController..text = device.passwordAP;
-      changed = false;
     }
     return Scaffold(
         appBar: AppBar(
-          title: Text("Configuración del porton"),
+          title: Text("Nombre del Porton"),
           actions: [
             IconButton(icon: Icon(Icons.settings), onPressed: () {
               Navigator.of(context).pushNamed("/settings");
@@ -160,18 +142,16 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
                       Expanded(
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: Text((widget.create)?"Paso 2 de 2":""),
+                            child: Text("Paso 3 de 3"),
                           )
                       ) : Expanded(child:Container()),
                       ElevatedButton(
                         child: Text(
-                            "GUARDAR porton"
+                            "GUARDAR"
                         ),
                         onPressed: (device.deviceStatus != DeviceStatus.updated)? null :  () async {
                           if (_formKey.currentState!.validate()) {
-                            changed = true;
                             device.name = _deviceNameController.text;
-                            device.passwordAP = _devicePasswordController.text;
                             print(device.toDatabaseJson());
                             setDevice();
 
@@ -182,7 +162,7 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
                                 if (widget.create) {
                                   modelsRepository.createDevice(
                                       device: device).then((value) {
-                                    messageManager.updateDevices();
+                                    deviceManager.updateDevices();
                                     ScaffoldMessenger.of(context)
                                         .showSnackBar(
                                       SnackBar(content: Text(
@@ -190,11 +170,10 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
                                           backgroundColor: Colors.green),
                                     );
 
-                                    messageManager.udpReceiver.close();
-                                    messageManager.update(updateWifi: true);
-                                    Navigator.of(context).pop();
-                                    Navigator.of(context).pop();
-                                    Navigator.of(context).pop();
+                                    deviceManager.udpReceiver.close();
+                                    deviceManager.update(updateWifi: true);
+                                    Navigator.of(context).pushNamedAndRemoveUntil("/devices", (route) => false);
+                                    
                                   });
                                 } else {
                                   modelsRepository.updateDevice(
@@ -234,12 +213,7 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
         child: Column(
             children: [
 
-              ListTile(
-                leading: const Text(""),
-                title: Text("Porton:"),
-              ),
 
-              Divider(),
               ListTile(
                 leading: Icon(
                   IconData(59653, fontFamily: 'signal_wifi'), size: 30,),
@@ -258,58 +232,11 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
                     )
                 ),
               ),
-              ListTile(
-                leading: const Text(""),
-                title: Text("WiFi:"),
-              ),
               Divider(),
               ListTile(
-                leading: Icon(Icons.lock, size: 30,),
-
-                title: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    TextFormField(
-                        controller: _devicePasswordController,
-                        maxLength: 20,
-                        obscureText: !_obscureText,
-                        validator: (val) {
-                          if (val == null || val == "") {
-                            return "Debe completar este campo.";
-                          }
-                          if (val.length < 8){
-                            return "La contraseña debe contenera almenos 8 caracteres";
-                          }
-                        },
-                        decoration: InputDecoration(
-                          labelText: "Contraseña del WiFi del porton*: ",
-                          hintText: "Contraseña del WiFi del porton",
-                        )
-                    ),
-                    GestureDetector(
-                      onTap: (){
-                        setState(() {
-                          _obscureText = !_obscureText;
-                        });
-                      },
-                      child: Row(
-                        children: [
-                          Checkbox(value: _obscureText, onChanged: (value){
-                            setState(() {
-                              _obscureText = value!;
-                            });
-
-                          }),
-                          Text("Mostrar contraseña")
-
-                        ],),
-                    ),
-                  ],
-                ),
-
-              ),
+                leading:Icon(Icons.info_outline),
+                subtitle: Text('Este sera el nombre que aparecera en la primera pantalla\n')
+              )
             ]
         )
     );
@@ -322,7 +249,8 @@ class _DeviceSettingsPageState extends State<DeviceSettingsPage> {
       "a": "set",
       "d": device.toArduinoSetJson()
     };
-    messageManager.send(jsonEncode(map), true);
+    deviceManager.send(jsonEncode(map), true);
+    deviceManager.send(jsonEncode(map), false);
   }
 
 

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:qrscan/qrscan.dart' as scanner;
 import 'package:open_gate/models/models.dart';
 import 'package:open_gate/pages/pages.dart';
@@ -10,15 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:wifi_configuration_2/wifi_configuration_2.dart';
 import 'package:system_settings/system_settings.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
-Future<void> enableWifi() async {
-  WifiConfiguration wifi = WifiConfiguration();
-  await wifi.enableWifi();
-}
-Future<void> disableWifi() async {
-  WifiConfiguration wifi = WifiConfiguration();
-  await wifi.disableWifi();
-}
 
 class SearchDevicesPage extends StatefulWidget {
   const SearchDevicesPage({Key? key, required this.title}) : super(key: key);
@@ -27,38 +22,23 @@ class SearchDevicesPage extends StatefulWidget {
   @override
   State<SearchDevicesPage> createState() => _SearchDevicesPageState();
 }
-
-class MyBullet extends StatelessWidget{
-  @override
-  Widget build(BuildContext context) {
-    return new Container(
-      height: 10.0,
-      width: 10.0,
-      decoration: new BoxDecoration(
-        color: Theme.of(context).hintColor,
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
 class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindingObserver {
   ModelsRepository modelsRepository = ModelsRepository();
   bool _isInForeground = true;
   bool loading = false;
   late Timer timerRedirect;
-  late MessageManager messageManager;
+  late DeviceManager deviceManager;
   late WifiConfiguration wifiConfiguration;
+
 
   @override
   void initState() {
-    super.initState();
-    wifiConfiguration = WifiConfiguration();
-
-    messageManager = context.read<MessageManager>();
+    deviceManager = context.read<DeviceManager>();
     timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) {});
     refresh();
     WidgetsBinding.instance!.addObserver(this);
+
+    super.initState();
   }
 
   @override
@@ -72,6 +52,7 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
   void dispose() {
     WidgetsBinding.instance!.removeObserver(this);
     timerRedirect.cancel();
+
     super.dispose();
   }
   @override
@@ -82,27 +63,29 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
     });
     print("is resumed $_isInForeground");
     if (_isInForeground) {
-      messageManager.updateNewDeviceConnection();
+      deviceManager.updateNewDeviceConnection();
     }
   }
 
   void refresh() async {
     await Future.delayed(Duration(seconds:1),);
 
-    messageManager.scannedDevices = [];
-    messageManager.notifyListeners();
     wifiConfiguration = WifiConfiguration();
-    messageManager.udpReceiver.close();
-    messageManager.update(updateWifi: true);
-
-    messageManager.status = ManagerStatus.updating ;
-    messageManager.notifyListeners();
+    deviceManager.udpReceiver.close();
+    deviceManager.update(updateWifi: true);
+    deviceManager.status = ManagerStatus.updating ;
+    deviceManager.notifyListeners();
     wifiConfiguration.connectToWifi("", "", ""); //TODO descomennatar esto para la release
 
   }
   @override
   Widget build(BuildContext context) {
-    messageManager = context.watch<MessageManager>();
+    deviceManager = context.watch<DeviceManager>();
+    if (deviceManager.status == DeviceStatus.updating){
+      loading = true;
+    }else{
+      loading = false;
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
@@ -125,113 +108,108 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
 
   List<Widget> getDevicesScanned() {
     List<Widget> list = [];
-    if (messageManager.status == ManagerStatus.updating){
+    if (loading){
       list.add(LinearProgressIndicator());
     }
     list.add(
         ListTile(
-            leading:(messageManager.status == ManagerStatus.updating)? Container(child: CircularProgressIndicator(),height:16,width: 16,):Text(""),
+            leading:(loading)? Container(child: CircularProgressIndicator(),height:16,width: 16,):Text(""),
             title: Text('Portones escaneados',style: TextStyle(color: Theme.of(context).primaryColor),)
         )
     );
 
-    if (messageManager.scannedDevices.isNotEmpty) {
+    if (deviceManager.scannedDevices.isNotEmpty) {
 
-      messageManager.scannedDevices.forEach((device) {
+      deviceManager.scannedDevices.forEach((device) {
         list.add(
           OpenContainer(
             openBuilder: (_, closeContainer) => ChooseWifiPage(create:true),
             tappable: false,
             closedColor: Theme.of(context).dialogBackgroundColor,
             closedBuilder: (_, openContainer) => SearchedDeviceWidget(device: device,onTap: () async {
+
               if (device.connectionStatus != ConnectionStatus.local) {
-
-                showDialog(context: context, builder: (context) {
-                  return AlertDialog(
-                    title: Text('Por favor lea TODO el instructivo'),
-                    content: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ListTile(
-                            leading: MyBullet(),
-                            title: Text('Primero debes apretar "ACEPTAR"'),
-                          ),
-                          ListTile(
-                            leading: MyBullet(),
-                            title: Text('Debes seleccionar la red "${messageManager.newDevice.name}" y ingresar como contraseña "OpenGate1234"'),
-                          ),
-                          ListTile(
-                            leading: MyBullet(),
-                            title: Text("Luego revisa tus notificaciones y deberia aparecerte algo como este mensaje (el mensaje puede tardar unos segundos en aparecer en la barra de notificaciones):"),
-                          ),
-                          Text("Esta red no tiene acceso a Internet.\n¿Deseas mantener la conexión?",style: Theme.of(context).textTheme.caption),
-                          ListTile(
-                            leading: MyBullet(),
-                            title: Text("Importante!, No debe marcar el mensaje:"),
-                          ),
-
-                          Text("No volver a preguntar",style: Theme.of(context).textTheme.caption),
-                          Divider()
-                        ],
+                deviceManager.selectNewDevice(device);
+                bool connected = await wifiConfiguration.isConnectedToWifi("${deviceManager.newDevice.name}");
+                if (connected){
+                  deviceManager.updateNewDeviceConnection();
+                  await Future.delayed(Duration(seconds: 3));
+                  if (deviceManager.newDevice
+                      .connectionStatus !=
+                      ConnectionStatus.local) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(
+                          'Si tienes los datos activados, tienes que desactivarlos.'),
+                        action: SnackBarAction(
+                          label: "Ir a desactivar datos",
+                          onPressed: () {
+                            SystemSettings.dataUsage();
+                          },
+                        ),
                       ),
-                    ),
-                    actions: <Widget>[
-                      TextButton( // Diseña el boton
-                        child: Text("ACEPTAR"),
-                        onPressed: () async {
+                    );
+                  }
+                }else{
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Conectate a la red 'Gate_${device.mac.toUpperCase().substring(3)}'"),
+                      action: SnackBarAction(
+                        label:"Ir a redes",
+                        onPressed: (){
                           SystemSettings.wifi();
-                          Navigator.of(context).pop();
-                          messageManager.selectNewDevice(device);
-
-                          timerRedirect.cancel();
-                          timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) {
-
-                            if (_isInForeground ){
-
-
-                              if (messageManager.newDevice.connectionStatus == ConnectionStatus.connecting) {
-                                timerRedirect.cancel();
-                                print("siuuu");
-
-                                wifiConfiguration.isConnectedToWifi("${messageManager.newDevice.name}").then((connected) async {
-                                  if (connected){
-
-
-                                    messageManager.update(updateWifi: false);
-                                    await Future.delayed(Duration(seconds:2));
-                                    messageManager.updateDeviceConnection(messageManager.newDevice);
-                                    timerRedirect.cancel();
-                                    timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) {
-                                      if(mounted && messageManager.newDevice.connectionStatus == ConnectionStatus.local) {
-                                        print("siuuu");
-                                        timerRedirect.cancel();
-                                        openContainer();
-                                      }
-                                    });
-                                    Future.delayed(Duration(milliseconds:3000),(){
-                                      timerRedirect.cancel();
-                                    });
-                                  }else{
-                                    messageManager.disconnectDevice(messageManager.newDevice);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Debe seleccionar la red correcta.')),
-                                    );
-                                  }
-                                });
-                              }else{
-                                print("noooooooooooooooo");
-                              }
-                            }
-                          });
                         },
                       ),
-                    ],
+                    ),
                   );
+                }
+                timerRedirect.cancel();
+                timerRedirect =
+                Timer.periodic(Duration(milliseconds: 1), (timer) {
+                  if (_isInForeground) {
+                    if (deviceManager.newDevice.connectionStatus ==
+                        ConnectionStatus.connecting) {
+                      timerRedirect.cancel();
+                      print("siuuu");
+
+                      wifiConfiguration.isConnectedToWifi(
+                          "${deviceManager.newDevice.name}").then((
+                          connected) async {
+                        if (connected) {
+                          deviceManager.update(updateWifi: false);
+                          deviceManager.updateDeviceConnection(
+                              deviceManager.newDevice);
+                          timerRedirect.cancel();
+                          timerRedirect = Timer.periodic(
+                              Duration(milliseconds: 1), (timer) {
+                            if (mounted && deviceManager.newDevice
+                                .connectionStatus ==
+                                ConnectionStatus.local) {
+                              print("siuuu");
+                              timerRedirect.cancel();
+                              openContainer();
+                            }
+                          });
+                          Future.delayed(
+                              Duration(milliseconds: 3000), () {
+                            timerRedirect.cancel();
+                          });
+                        } else {
+                          deviceManager.disconnectDevice(
+                              deviceManager.newDevice);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(
+                                'Debe seleccionar la red correcta.')),
+                          );
+                        }
+                      });
+                    } else {
+                      print("noooooooooooooooo");
+                    }
+                  }
                 });
-              }else{
+              } else {
                 openContainer();
               }
+
             },),
           ),
         );
@@ -245,43 +223,64 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
           label: Text("Escanear codigo QR"),
           icon: Icon(Icons.qr_code),
           onPressed: () async {
-            String? cameraScanResult = await scanner.scan();
+            var statusCamera = await Permission.camera.request();
+            var statusStorage = await Permission.storage.request();
+            if (statusStorage.isGranted && statusCamera.isGranted){
+              String? cameraScanResult = await scanner.scan();
 
-            Map<String, dynamic> map = jsonDecode(cameraScanResult!);
-            try{
-              Device device = Device.fromQRCode(map);
-              modelsRepository.createDevice(device: device).then((value) {});
-              Navigator.of(context).pop();
-              showDialog(context: context, builder: (_) {
+              Map<String, dynamic> map = jsonDecode(cameraScanResult!);
+              try{
+                Device device = Device.fromQRCode(map);
+                modelsRepository.createDevice(device: device).then((value) {});
+                Navigator.of(context).pop();
+                showDialog(context: context, builder: (_) {
 
 
-                return AlertDialog(
-                  title: Text("Porton '${device.name}' agregado exitosamente"),
-                  content: SingleChildScrollView(
-                    child: Text(
-                        "Ahora ya puedes utilizar el porton que acabas de escanear"),
-                  ),
+                  return AlertDialog(
+                    title: Text("Porton '${device.name}' agregado exitosamente"),
+                    content: SingleChildScrollView(
+                      child: Text(
+                          "Ahora ya puedes utilizar el porton que acabas de escanear"),
+                    ),
+                  );
+                });
+
+              }catch(e){
+                showDialog(context: context, builder: (_) {
+
+
+                  return AlertDialog(
+                    title: Text("No se apodido agregar el porton"),
+                    content: SingleChildScrollView(
+                      child: Text(
+                          "El codigo que has escaneado no es valido o la version de la app no corresponde con el codigo qr"),
+                    ),
+                  );
+                });
+              }
+            }else{
+              if (statusStorage.isPermanentlyDenied || statusCamera.isPermanentlyDenied){
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      content: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            Text('Debes permitir los dos permisos para poder scanear'),
+                            Center(
+                              child:OutlinedButton(
+                                child: Text("Abrir permisos"),
+                                onPressed: (){
+                                  openAppSettings();
+                                },
+                              )
+                            )
+                          ],
+                        ),
+                      ),backgroundColor:Theme.of(context).errorColor),
                 );
-              });
-
-            }catch(e){
-              showDialog(context: context, builder: (_) {
-
-
-                return AlertDialog(
-                  title: Text("No se apodido agregar el porton"),
-                  content: SingleChildScrollView(
-                    child: Text(
-                        "El codigo que has escaneado no es valido o la version de la app no corresponde con el codigo qr"),
-                  ),
-                );
-              });
+              }
             }
 
-
-
-
-            print(cameraScanResult);
           }
       )
     );
@@ -289,21 +288,49 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
       leading: Icon(Icons.info_outline),
       subtitle: Text("Presiona un Porton para configurarlo\n"),
     ));
+
+    list.add(
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          OutlinedButton.icon(
+            onPressed: (){
+              SystemSettings.wifi();
+            },
+            icon: Icon(Icons.network_wifi),
+            label: Text("Ir a redes"),
+          ),
+          OutlinedButton.icon(
+            onPressed: (){
+              Clipboard.setData(ClipboardData(text: "OpenGate1234"));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Contraseña copiada al portapapeles")));
+            },
+            icon: Icon(Icons.copy),
+            label: Text("Password"),
+          )
+        ],
+      )
+    );
+    list.add(
+      ListTile(
+          leading: Text("1."),
+
+          title: Text("Conenctate a la red Gate_XX:XX:XX:XX:XX"),
+          subtitle: Text("Contraseña: OpenGate1234, Si no es posible debe ser porque alguien la cambio (puedes cambiarla solo reseteando el dispositivo)")
+      )
+    );
+    list.add(
+      Divider()
+    );
+    list.add(
+        ListTile(
+          leading: Text("2."),
+          title: Text("Ignora el mensaje que te aparece en las notificaciones 'Ingresar a esta red'"),
+          subtitle: Text("Si lo apretas simplemente vuelve"),
+        )
+    );
     return list;
   }
-
-
-  Future<void> checkConnection() async {
-    bool value = await wifiConfiguration.isWifiEnabled();
-    if (!value) {
-      await enableWifi();
-    }
-    wifiConfiguration.checkConnection().then((value) {
-      print('Value: ${value.toString()}');
-    });
-  }
-
-
 }
 
 class SearchedDeviceWidget extends StatelessWidget {

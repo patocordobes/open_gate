@@ -7,19 +7,22 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+    runApp(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => DeviceManager()),
+
+          ],
+          child: MyApp(),
+        )
+    );
   //WidgetsFlutterBinding.ensureInitialized();
   //SystemChrome.setPreferredOrientations(
  //     [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => MessageManager()),
 
-      ],
-      child: MyApp(),
-    )
-  );
   ModelsRepository modelsRepository = ModelsRepository();
   try {
     await modelsRepository.getUser;
@@ -42,12 +45,13 @@ class _MyApp extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Open Gate',
-        theme: CustomTheme.lightTheme,
-        highContrastTheme: CustomTheme.lightTheme,
-        darkTheme: CustomTheme.darkTheme,
-        onGenerateRoute: RouteGenerator.generateRoute,
+      debugShowCheckedModeBanner: false,
+      title: 'Open Gate',
+      theme: CustomTheme.lightTheme,
+      highContrastTheme: CustomTheme.lightTheme,
+      darkTheme: CustomTheme.darkTheme,
+      onGenerateRoute: RouteGenerator.generateRoute,
+
     );
   }
 

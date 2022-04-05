@@ -19,13 +19,13 @@ class EditDevicePage extends StatefulWidget {
 class _EditDevicePageState extends State<EditDevicePage> {
   ModelsRepository modelsRepository = ModelsRepository();
   late Device device;
-  late MessageManager messageManager;
+  late DeviceManager deviceManager;
 
   @override
   void initState() {
     super.initState();
-    messageManager = context.read<MessageManager>();
-    device = messageManager.selectedDevice;
+    deviceManager = context.read<DeviceManager>();
+    device = deviceManager.selectedDevice;
     refresh();
   }
   void refresh() {
@@ -36,10 +36,10 @@ class _EditDevicePageState extends State<EditDevicePage> {
           "t": "devices/" + device.mac.toUpperCase().substring(3),
           "a": "getmqtt",
         };
-        if (await device.isConnectedLocally()) {
-          messageManager.send(jsonEncode(map), true);
+        if (await device.isSameNetwork()) {
+          deviceManager.send(jsonEncode(map), true);
         }else{
-          messageManager.send(jsonEncode(map), false);
+          deviceManager.send(jsonEncode(map), false);
         }
         await Future.delayed(Duration(milliseconds:200));
         device.deviceStatus = DeviceStatus.updating;
@@ -47,10 +47,10 @@ class _EditDevicePageState extends State<EditDevicePage> {
           "t": "devices/" + device.mac.toUpperCase().substring(3),
           "a": "getip",
         };
-        if (await device.isConnectedLocally()) {
-          messageManager.send(jsonEncode(map), true);
+        if (await device.isSameNetwork()) {
+          deviceManager.send(jsonEncode(map), true);
         }else{
-          messageManager.send(jsonEncode(map), false);
+          deviceManager.send(jsonEncode(map), false);
         }
         await Future.delayed(Duration(milliseconds:200));
         device.deviceStatus = DeviceStatus.updating;
@@ -58,10 +58,10 @@ class _EditDevicePageState extends State<EditDevicePage> {
           "t": "devices/" + device.mac.toUpperCase().substring(3),
           "a": "getcw",
         };
-        if (await device.isConnectedLocally()) {
-          messageManager.send(jsonEncode(map), true);
+        if (await device.isSameNetwork()) {
+          deviceManager.send(jsonEncode(map), true);
         }else{
-          messageManager.send(jsonEncode(map), false);
+          deviceManager.send(jsonEncode(map), false);
         }
 
         await Future.delayed(Duration(milliseconds:200));
@@ -70,10 +70,10 @@ class _EditDevicePageState extends State<EditDevicePage> {
           "t": "devices/" + device.mac.toUpperCase().substring(3),
           "a": "gettype",
         };
-        if (await device.isConnectedLocally()) {
-          messageManager.send(jsonEncode(map), true);
+        if (await device.isSameNetwork()) {
+          deviceManager.send(jsonEncode(map), true);
         }else{
-          messageManager.send(jsonEncode(map), false);
+          deviceManager.send(jsonEncode(map), false);
         }
       }
       await Future.delayed(Duration(seconds: 1));
@@ -84,7 +84,7 @@ class _EditDevicePageState extends State<EditDevicePage> {
           "t": "devices/" + device.mac.toUpperCase().substring(3),
           "a": "getw",
         };
-        messageManager.send(jsonEncode(map), true);
+        deviceManager.send(jsonEncode(map), true);
       }
     });
   }
@@ -100,8 +100,8 @@ class _EditDevicePageState extends State<EditDevicePage> {
   }
   @override
   Widget build(BuildContext context) {
-    messageManager = context.watch<MessageManager>();
-    device = messageManager.selectedDevice;
+    deviceManager = context.watch<DeviceManager>();
+    device = deviceManager.selectedDevice;
     late Widget deviceWidget;
     Widget deviceStatus = ListTile(
       leading: Icon(
@@ -266,7 +266,7 @@ class _EditDevicePageState extends State<EditDevicePage> {
                           if (result != null){
                             if (result){
                               modelsRepository.deleteDevice(device: device).then((_) async {
-                                await messageManager.updateDevices();
+                                await deviceManager.updateDevices();
                                 Navigator.of(context).pop();
                               });
                             }
@@ -281,10 +281,10 @@ class _EditDevicePageState extends State<EditDevicePage> {
                       onPressed: () {
                         if (device.connectionStatus ==
                             ConnectionStatus.disconnected) {
-                          messageManager.updateDeviceConnection(device);
+                          deviceManager.updateDeviceConnection(device);
                         } else {
-                          messageManager.disconnectDevice(device);
-                          messageManager.updateDevicesConnection();
+                          deviceManager.disconnectDevice(device);
+                          deviceManager.updateDevicesConnection();
                         }
 
                       }
@@ -338,10 +338,10 @@ class _EditDevicePageState extends State<EditDevicePage> {
                                     device.mac.toUpperCase().substring(3),
                                 "a": "reset",
                               };
-                              if (await device.isConnectedLocally()) {
-                                messageManager.send(jsonEncode(map), true);
+                              if (await device.isSameNetwork()) {
+                                deviceManager.send(jsonEncode(map), true);
                               } else {
-                                messageManager.send(jsonEncode(map), false);
+                                deviceManager.send(jsonEncode(map), false);
                               }
                             }
                           }
@@ -378,6 +378,62 @@ class _EditDevicePageState extends State<EditDevicePage> {
               ),
             ),
             OpenContainer(
+              openBuilder: (_, closeContainer) => ChangeNamePage(create: false),
+              tappable: false,
+              closedColor: Theme.of(context).dialogBackgroundColor,
+              openColor: Colors.transparent,
+              closedBuilder: (_, openContainer) => ListTile(
+                  enabled: (device.connectionStatus != ConnectionStatus.disconnected)? true:false,
+                  leading: Icon(
+                    IconData(59653, fontFamily: 'signal_wifi'),),
+                  title: Text("Editar nombre"),
+                  subtitle: Text("Para cambiar el nombre del porton"),
+                  onTap: (){
+                    openContainer();
+                  }
+              ),
+            ),
+            OpenContainer(
+              openBuilder: (_, closeContainer) => TimersUtcPage(),
+              tappable: false,
+              closedColor: Theme.of(context).dialogBackgroundColor,
+              openColor: Colors.transparent,
+              closedBuilder: (_, openContainer) => ListTile(
+                  enabled: (device.connectionStatus != ConnectionStatus.disconnected)? true:false,
+                  leading: Icon(Icons.timer_outlined,),
+                  title: Text("Editar UTC y timers"),
+                  subtitle: Text("Para cambiar el UTC (coordinated universal time) y los tiempos de cerrado del porton."),
+                  onTap: (){
+                    openContainer();
+                  }
+              ),
+            ),
+            Divider(),
+            ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text("Solo localmente"),
+
+              trailing: OutlinedButton.icon(
+                icon: Icon(Icons.help),
+                label: Text("Ayuda"),
+                onPressed: (){
+                  showDialog(context: context, builder: (_) {
+                    return AlertDialog(
+                      title: Text("Como estar conectado localmente?"),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            Text(
+                                "Para estar conectado localmente tu dispositivo celular debe estar conectado a la misma red que tu porton. En este caso tu dispositivo debe estar conectado a '${device.ssid}'.")
+                          ],
+                        ),
+                      ),
+                    );
+                  });
+                },
+              ),
+            ),
+            OpenContainer(
               openBuilder: (_, closeContainer) => ChooseWifiPage(create:false),
               tappable: false,
               closedColor: Theme.of(context).dialogBackgroundColor,
@@ -393,31 +449,15 @@ class _EditDevicePageState extends State<EditDevicePage> {
               ),
             ),
             OpenContainer(
-              openBuilder: (_, closeContainer) => DeviceSettingsPage(create:false),
+              openBuilder: (_, closeContainer) => ChangeAPPassword(),
               tappable: false,
               closedColor: Theme.of(context).dialogBackgroundColor,
               openColor: Colors.transparent,
               closedBuilder: (_, openContainer) => ListTile(
                   enabled: (device.connectionStatus == ConnectionStatus.local)? true:false,
-                  leading: Icon(
-                    IconData(59653, fontFamily: 'signal_wifi'),),
-                  title: Text("Editar nombre y contraseña del porton"),
-                  subtitle: Text("Para cambiar el nombre y la contraseña del WiFi que genera el porton."),
-                  onTap: (){
-                    openContainer();
-                  }
-              ),
-            ),
-            OpenContainer(
-              openBuilder: (_, closeContainer) => TimersUtcPage(),
-              tappable: false,
-              closedColor: Theme.of(context).dialogBackgroundColor,
-              openColor: Colors.transparent,
-              closedBuilder: (_, openContainer) => ListTile(
-                  enabled: (device.connectionStatus == ConnectionStatus.local)? true:false,
-                  leading: Icon(Icons.timer_outlined,),
-                  title: Text("Editar UTC y timers"),
-                  subtitle: Text("Para cambiar el UTC (coordinated universal time) y los tiempos de cerrado del porton."),
+                  leading: Icon(Icons.wifi_tethering,),
+                  title: Text("Editar contraseña del porton"),
+                  subtitle: Text("Para cambiar la contraseña de la red del porton."),
                   onTap: (){
                     openContainer();
                   }

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:animations/animations.dart';
 import 'package:open_gate/models/user_model.dart';
-import 'package:open_gate/models/message_manager_model.dart';
+import 'package:open_gate/manager/device_manager.dart';
 import 'package:open_gate/models/models.dart';
 import 'package:open_gate/repository/models_repository.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +19,7 @@ class _DevicePageState extends State<DevicePage> {
   bool isLoaded = false;
 
   ModelsRepository modelsRepository = ModelsRepository();
-  late MessageManager messageManager;
+  late DeviceManager deviceManager;
 
   User user = User();
 
@@ -47,9 +47,9 @@ class _DevicePageState extends State<DevicePage> {
           "a":"getfc",
         };
         if (device.connectionStatus == ConnectionStatus.local) {
-          messageManager.send(jsonEncode(map),true);
+          deviceManager.send(jsonEncode(map),true);
         }else{
-          messageManager.send(jsonEncode(map),false);
+          deviceManager.send(jsonEncode(map),false);
         }
 
     });
@@ -73,9 +73,9 @@ class _DevicePageState extends State<DevicePage> {
       "a":"getfc",
     };
     if (device.connectionStatus == ConnectionStatus.local) {
-      messageManager.send(jsonEncode(map),true);
+      deviceManager.send(jsonEncode(map),true);
     }else{
-      messageManager.send(jsonEncode(map),false);
+      deviceManager.send(jsonEncode(map),false);
     }
 
   }
@@ -96,8 +96,8 @@ class _DevicePageState extends State<DevicePage> {
 
   @override
   Widget build(BuildContext context) {
-    messageManager = context.watch<MessageManager>();
-    device = messageManager.selectedDevice;
+    deviceManager = context.watch<DeviceManager>();
+    device = deviceManager.selectedDevice;
 
     if(device.deviceStatus == DeviceStatus.updating) {
       isLoaded = false;
@@ -148,9 +148,9 @@ class _DevicePageState extends State<DevicePage> {
                     "a":"set1",
                   };
                   if (device.connectionStatus == ConnectionStatus.local) {
-                    messageManager.send(jsonEncode(map),true);
+                    deviceManager.send(jsonEncode(map),true);
                   }else{
-                    messageManager.send(jsonEncode(map),false);
+                    deviceManager.send(jsonEncode(map),false);
                   }
                 },
                 child: Text("Porton 1",style: TextStyle(fontSize: 20),),
@@ -181,9 +181,9 @@ class _DevicePageState extends State<DevicePage> {
                       "a":"set2",
                     };
                     if (device.connectionStatus == ConnectionStatus.local) {
-                      messageManager.send(jsonEncode(map),true);
+                      deviceManager.send(jsonEncode(map),true);
                     }else{
-                      messageManager.send(jsonEncode(map),false);
+                      deviceManager.send(jsonEncode(map),false);
                     }
                   },
                   child: Text("Porton 2",style: TextStyle(fontSize: 20),),
@@ -207,9 +207,9 @@ class _DevicePageState extends State<DevicePage> {
       "d": data
     };
     if (device.connectionStatus == ConnectionStatus.local) {
-      messageManager.send(jsonEncode(map),true);
+      deviceManager.send(jsonEncode(map),true);
     }else{
-      messageManager.send(jsonEncode(map),false);
+      deviceManager.send(jsonEncode(map),false);
     }
   }
 }

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:open_gate/models/message_manager_model.dart';
+import 'package:open_gate/manager/device_manager.dart';
 import 'package:open_gate/models/models.dart';
 import 'package:open_gate/repository/models_repository.dart';
 import 'package:flutter/material.dart';
@@ -23,7 +23,7 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
   bool isLoaded = false;
   ModelsRepository modelsRepository = ModelsRepository();
   late Device device;
-  late MessageManager messageManager;
+  late DeviceManager deviceManager;
   late Timer timer;
   late Timer timerRedirect ;
   final _formKey = GlobalKey<FormState>();
@@ -36,8 +36,8 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
   void initState() {
     super.initState();
     timerRedirect = Timer.periodic(Duration(seconds:40), (timer) { });
-    messageManager = context.read<MessageManager>();
-    device = messageManager.selectedDevice;
+    deviceManager = context.read<DeviceManager>();
+    device = deviceManager.selectedDevice;
 
     refresh();
     timer = Timer.periodic(Duration(milliseconds:1), (timer) async  {
@@ -57,14 +57,16 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
         "t": "devices/" + device.mac.toUpperCase().substring(3),
         "a": "getutc",
       };
-      messageManager.send(jsonEncode(map), true);
+      deviceManager.send(jsonEncode(map), true);
+      deviceManager.send(jsonEncode(map), false);
       await Future.delayed(Duration(microseconds: 500));
       device.deviceStatus = DeviceStatus.updating;
       map = {
         "t": "devices/" + device.mac.toUpperCase().substring(3),
         "a": "gettimers",
       };
-      messageManager.send(jsonEncode(map), true);
+      deviceManager.send(jsonEncode(map), true);
+      deviceManager.send(jsonEncode(map), false);
 
     }else{
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,9 +90,9 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
 
   @override
   Widget build(BuildContext context) {
-    messageManager = context.watch<MessageManager>();
+    deviceManager = context.watch<DeviceManager>();
 
-    device = messageManager.selectedDevice;
+    device = deviceManager.selectedDevice;
 
     if(device.deviceStatus == DeviceStatus.updating) {
       isLoaded = false;
@@ -212,13 +214,13 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
                 title: TextFormField(
                     controller: _deviceUTCController,
                     keyboardType: TextInputType.number,
-                    inputFormatters: <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: <TextInputFormatter>[FilteringTextInputFormatter.allow(RegExp(r'[0-9--]'))],
                     validator: (val) {
                       if (val == null || val == "") {
                         return "Debe completar este campo.";
                       }
-                      if (int.parse(val) > 12  || int.parse(val) < -12) {
-                        return "El UTC debe ser menor a 12 y mayor a -12";
+                      if (int.parse(val) > 6  || int.parse(val) < -6) {
+                        return "El UTC debe ser menor a 6 y mayor a -6";
                       }
                     },
                     decoration: InputDecoration(
@@ -243,8 +245,8 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
                       if (val == null || val == "") {
                         return "Debe completar este campo.";
                       }
-                      if (int.parse(val) > 255 || int.parse(val) < 40) {
-                        return "menores a 255 y mayores a 40";
+                      if (int.parse(val) > 255 || int.parse(val) < 5) {
+                        return "menores a 255 y mayores a 5";
                       }
                     },
                     decoration: InputDecoration(
@@ -264,8 +266,8 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
                       if (val == null || val == "") {
                         return "Debe completar este campo.";
                       }
-                      if (int.parse(val) > 255 || int.parse(val) < 30) {
-                        return "menores a 255 y mayores a 30";
+                      if (int.parse(val) > 255 || int.parse(val) < 5) {
+                        return "menores a 255 y mayores a 5";
                       }
                     },
                     decoration: InputDecoration(
@@ -288,7 +290,7 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
         "u": device.UTC,
       }
     };
-    messageManager.send(jsonEncode(map), true);
+    deviceManager.send(jsonEncode(map), true);
     await Future.delayed(Duration(microseconds: 500));
 
     device.deviceStatus = DeviceStatus.updating;
@@ -300,7 +302,8 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
         "n": device.nightTimer,
       }
     };
-    messageManager.send(jsonEncode(map), true);
+    deviceManager.send(jsonEncode(map), true);
+    deviceManager.send(jsonEncode(map), false);
   }
 
 

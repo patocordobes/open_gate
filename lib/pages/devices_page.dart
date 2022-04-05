@@ -18,55 +18,57 @@ class DevicesPage extends StatefulWidget {
 }
 
 class _DevicesPageState extends State<DevicesPage> {
-  ModelsRepository modelsRepository = ModelsRepository();
   List<Device> devicesConnected = [];
   List<Device> devicesDisconnected = [];
   bool isLoaded = false;
-  late MessageManager messageManager;
+  late DeviceManager deviceManager;
   late Timer updateDevicesConnection;
   late Timer updateMqtt;
   late Timer timerRedirect;
 
-
+  void initTimer(){
+    updateDevicesConnection = Timer.periodic(Duration(seconds: 40), (t) {
+      deviceManager.updateDevicesConnection();
+    });
+    updateMqtt = Timer.periodic(Duration(seconds:5),(t){
+      deviceManager.update(updateWifi: false);
+    });
+  }
   @override
   void initState(){
     super.initState();
+    initTimer();
     timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) {
     });
-    messageManager = context.read<MessageManager>();
-    messageManager.start();
-    refresh();
-    updateDevicesConnection = Timer.periodic(Duration(seconds: 40), (t) {
-      messageManager.updateDevicesConnection();
-    });
-    updateMqtt = Timer.periodic(Duration(seconds:5),(t){
+    deviceManager = context.read<DeviceManager>();
+    deviceManager.start();
 
-      messageManager.update(updateWifi: false);
-
-    });
   }
   void refresh(){
-    messageManager.updateDevicesConnection();
+    updateMqtt.cancel();
+    updateDevicesConnection.cancel();
+    initTimer();
+    deviceManager.updateDevices();
   }
   @override
   void dispose() {
     super.dispose();
     updateMqtt.cancel();
     updateDevicesConnection.cancel();
-    messageManager.stop();
+    deviceManager.stop();
   }
   @override
   Widget build(BuildContext context) {
 
-    messageManager = context.watch<MessageManager>();
-    if(messageManager.status == ManagerStatus.starting || messageManager.status == ManagerStatus.updating) {
+    deviceManager = context.watch<DeviceManager>();
+    if(deviceManager.status == ManagerStatus.starting || deviceManager.status == ManagerStatus.updating) {
       isLoaded = false;
     }else{
       isLoaded = true;
     }
     devicesConnected = [];
     devicesDisconnected = [];
-    messageManager.getDevices.forEach((device){
+    deviceManager.getDevices.forEach((device){
       if (device.connectionStatus != ConnectionStatus.disconnected && device.connectionStatus != ConnectionStatus.connecting){
         devicesConnected.add(device);
       }else{
@@ -121,9 +123,9 @@ class _DevicesPageState extends State<DevicesPage> {
           tappable: false,
           closedColor: Theme.of(context).dialogBackgroundColor,
           openColor: Colors.transparent,
-          closedBuilder: (_, openContainer) => DeviceWidget(device: device,messageManager: messageManager, openContainer: openContainer,onTap: (){
+          closedBuilder: (_, openContainer) => DeviceWidget(device: device,deviceManager: deviceManager, openContainer: openContainer,onTap: (){
             openContainer();
-            messageManager.selectDevice(device);
+            deviceManager.selectDevice(device);
           }),
         ),
       );
@@ -141,12 +143,11 @@ class _DevicesPageState extends State<DevicesPage> {
       list.add(
         OpenContainer(
           openBuilder: (_, closeContainer) => DevicePage(),
-
           closedColor: Theme.of(context).dialogBackgroundColor,
           openColor: Colors.transparent,
-          closedBuilder: (_, openContainer) => DeviceWidget(device: device,messageManager: messageManager, openContainer: openContainer,onTap: () async {
-            messageManager.selectDevice(device);
-            messageManager.updateDeviceConnection(device);
+          closedBuilder: (_, openContainer) =>  DeviceWidget(device: device,deviceManager: deviceManager, openContainer: openContainer,onTap: () async {
+            deviceManager.selectDevice(device);
+            deviceManager.updateDeviceConnection(device);
             timerRedirect.cancel();
             timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) {
               if (device.connectionStatus == ConnectionStatus.local || device.connectionStatus == ConnectionStatus.mqtt){
@@ -185,9 +186,9 @@ class _DevicesPageState extends State<DevicesPage> {
 
 }
 class DeviceWidget extends StatelessWidget {
-  DeviceWidget({required this.device, required this.messageManager, required this.openContainer, required this.onTap});
+  DeviceWidget({required this.device, required this.deviceManager, required this.openContainer, required this.onTap});
   final Device device;
-  final MessageManager messageManager;
+  final DeviceManager deviceManager;
   final VoidCallback openContainer;
   final void Function() onTap;
   @override
@@ -218,7 +219,7 @@ class DeviceWidget extends StatelessWidget {
               color: Theme.of(context).accentColor,
               icon: Icon(Icons.edit),
               onPressed: (){
-                messageManager.selectDevice(device);
+                deviceManager.selectDevice(device);
                 Navigator.of(context).pushNamed("/edit_device");
               }
           )

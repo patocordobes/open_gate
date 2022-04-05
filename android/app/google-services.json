@@ -1,0 +1,69 @@
+{
+  "project_info": {
+    "project_number": "512038723003",
+    "firebase_url": "https://watch-104ed.firebaseio.com",
+    "project_id": "watch-104ed",
+    "storage_bucket": "watch-104ed.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:512038723003:android:c02697363804f0c7e9b89e",
+        "android_client_info": {
+          "package_name": "com.federicosironi.eco_puntos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "512038723003-5er6evud1prv6jei802ti1ti1puoda68.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfsR5WkQjQ-9Am9r7lelNyY_Iy-M7xO5Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "512038723003-5er6evud1prv6jei802ti1ti1puoda68.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:512038723003:android:977b92d38b116b99e9b89e",
+        "android_client_info": {
+          "package_name": "com.federicosironi.open_gate"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "512038723003-5er6evud1prv6jei802ti1ti1puoda68.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfsR5WkQjQ-9Am9r7lelNyY_Iy-M7xO5Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "512038723003-5er6evud1prv6jei802ti1ti1puoda68.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

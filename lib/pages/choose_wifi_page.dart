@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:open_gate/models/message_manager_model.dart';
+import 'package:open_gate/manager/device_manager.dart';
 import 'package:open_gate/models/models.dart';
 import 'package:open_gate/repository/models_repository.dart';
 import 'package:flutter/material.dart';
@@ -20,26 +20,45 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
   bool isLoaded = false;
   bool connectingToWiFi = false;
   late Device device;
-  late MessageManager messageManager;
-  late Timer timer;
+  late DeviceManager deviceManager;
   late Timer timerGetting;
-  ModelsRepository modelsRepository = ModelsRepository();
-  WifiConfiguration wifiConfiguration = WifiConfiguration();
   late Timer timerRedirect ;
+  bool scanButton = true;
+  ModelsRepository modelsRepository = ModelsRepository();
 
+  void initTimer(){
+    timerGetting = Timer.periodic(Duration(seconds:2), (timer) {
+      if (device.connectionStatus != ConnectionStatus.disconnected) {
+        if (device.connectionStatus == ConnectionStatus.local ) {
+          device.deviceStatus = DeviceStatus.updating;
+          device.wifiStatus = WifiStatus.getting;
+          Map <String, dynamic> map = {
+            "t": "devices/" + device.mac.toUpperCase().substring(3),
+            "a": "getcw",
+          };
+          deviceManager.send(jsonEncode(map), true);
+          map = {
+            "t": "devices/" + device.mac.toUpperCase().substring(3),
+            "a": "gettype",
+          };
+          deviceManager.send(jsonEncode(map), true);
+          //timerGetting.cancel();
+        }
+      }
+    });
+  }
   @override
   void initState() {
     super.initState();
-    timerGetting = Timer.periodic(Duration(seconds:40), (timer) { });
-    timerRedirect = Timer.periodic(Duration(seconds:40), (timer) { });
-    messageManager = context.read<MessageManager>();
+    deviceManager = context.read<DeviceManager>();
     if (widget.create){
-      device = messageManager.newDevice;
+      device = deviceManager.newDevice;
     }else {
-      device = messageManager.selectedDevice;
+      device = deviceManager.selectedDevice;
     }
-    refresh();
-    timer = Timer.periodic(Duration(milliseconds:1), (timer) async  {
+
+    initTimer();
+    timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) async  {
       if (device.connectionStatus != ConnectionStatus.disconnected) {
         if (device.connectionStatus != ConnectionStatus.local && device.connectionStatus != ConnectionStatus.updating) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -67,59 +86,20 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
   @override
   void dispose() {
     timerRedirect.cancel();
-    timer.cancel();
+    timerGetting.cancel();
     super.dispose();
-
   }
   void refresh() async {
-    await Future.delayed(Duration(milliseconds:1));
-    wifiConfiguration = WifiConfiguration();
-    if (device.connectionStatus != ConnectionStatus.disconnected) {
-      if (device.connectionStatus == ConnectionStatus.local ) {
-        device.deviceStatus = DeviceStatus.updating;
-        device.wifiStatus = WifiStatus.getting;
-        Map <String, dynamic> map = {
-          "t": "devices/" + device.mac.toUpperCase().substring(3),
-          "a": "getcw",
-        };
-        messageManager.send(jsonEncode(map), true);
-        timerGetting.cancel();
-        timerGetting = Timer.periodic(Duration(milliseconds:1), (timer) async  {
-          if (device.deviceStatus == DeviceStatus.updated){
-            timerGetting.cancel();
-            device.deviceStatus = DeviceStatus.updating;
-            device.wifiStatus = WifiStatus.scanning;
-            map = {
-              "t": "devices/" + device.mac.toUpperCase().substring(3),
-              "a": "getw",
-            };
-            messageManager.send(jsonEncode(map), true);
-
-            timerGetting = Timer.periodic(Duration(milliseconds:1), (timer) async  {
-              if (device.deviceStatus == DeviceStatus.updated){
-                timerGetting.cancel();
-                device.deviceStatus = DeviceStatus.updating;
-
-                map = {
-                  "t": "devices/" + device.mac.toUpperCase().substring(3),
-                  "a": "gettype",
-                };
-                messageManager.send(jsonEncode(map), true);
-              }
-            });
-          }
-        });
-
-      }
-    }
+    timerGetting.cancel();
+    initTimer();
   }
   @override
   Widget build(BuildContext context) {
-    messageManager = context.watch<MessageManager>();
+    deviceManager = context.watch<DeviceManager>();
     if (widget.create){
-      device = messageManager.newDevice;
+      device = deviceManager.newDevice;
     }else {
-      device = messageManager.selectedDevice;
+      device = deviceManager.selectedDevice;
     }
     if(device.deviceStatus == DeviceStatus.updating) {
       isLoaded = false;
@@ -179,42 +159,41 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
 
     if (device.connectedToWiFi && device.currentWifiNetwork != null){
       list.add(
-        ListTile(
-          leading: Icon(
-            IconData(59648 + (int.parse(device.currentWifiNetwork!.signalLevel!)), fontFamily: 'signal_wifi'),size: 30,),
-          title: Text('${device.currentWifiNetwork!.ssid!}'),
-          subtitle: Text('Conectada'),
-          trailing: IconButton(icon: Icon(Icons.settings,color: Theme.of(context).accentColor,),onPressed: ()async {
-            bool? result = await showDialog(context: context, builder: (_){
-              return AlertDialog(
-                title: Text("¿Olvidar esta red?"),
-                content: Text("Una vez olvida la red tendra que reconectarse nuevamente"),
-                actions: [
-                  TextButton(
-                    child:Text("CANCELAR"),
-                    onPressed: (){
-                      Navigator.of(context).pop(false);
-                    },
-                  ),
-                  TextButton(
-                    child:Text("OLVIDAR ESTA RED"),
-                    onPressed: (){
-                      Navigator.of(context).pop(true);
+          ListTile(
+            leading: Icon(IconData(59648 + (int.parse(device.currentWifiNetwork!.signalLevel!)), fontFamily: 'signal_wifi'),size: 30,),
+            title: Text('${device.currentWifiNetwork!.ssid!}'),
+            subtitle: Text('Conectada'),
+            trailing: IconButton(icon: Icon(Icons.settings,color: Theme.of(context).accentColor,),onPressed: ()async {
+              bool? result = await showDialog(context: context, builder: (_){
+                return AlertDialog(
+                  title: Text("¿Olvidar esta red?"),
+                  content: Text("Una vez olvida la red tendra que reconectarse nuevamente"),
+                  actions: [
+                    TextButton(
+                      child:Text("CANCELAR"),
+                      onPressed: (){
+                        Navigator.of(context).pop(false);
+                      },
+                    ),
+                    TextButton(
+                      child:Text("OLVIDAR ESTA RED"),
+                      onPressed: (){
+                        Navigator.of(context).pop(true);
 
-                    },
-                  )
-                ],
+                      },
+                    )
+                  ],
 
-              );
-            });
-            if (result != null){
-              if (result){
-                disconnectWiFi();
-                refresh();
+                );
+              });
+              if (result != null){
+                if (result){
+                  disconnectWiFi();
+                  refresh();
+                }
               }
-            }
-          }),
-        )
+            }),
+          )
       );
     }else{
       list.add(
@@ -226,16 +205,47 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
       );
     }
     list.add(Divider());
+
     list.add(
         ListTile(
-          leading: (device.wifiStatus == WifiStatus.getting || device.wifiStatus == WifiStatus.connecting || device.wifiStatus == WifiStatus.scanning)?Container(child: CircularProgressIndicator(),height:16,width: 16,):Text(""),
+          trailing: OutlinedButton.icon(
+            icon: Icon(Icons.refresh,size:16),
+            onPressed: scanButton? (){
+              if (device.connectionStatus != ConnectionStatus.disconnected) {
+                if (device.connectionStatus == ConnectionStatus.local ) {
+                  setState(() {
+                    scanButton = false;
+                  });
+
+                  device.deviceStatus = DeviceStatus.updating;
+                  device.wifiStatus = WifiStatus.scanning;
+                  Map <String, dynamic> map = {
+                    "t": "devices/" + device.mac.toUpperCase().substring(3),
+                    "a": "getw",
+                  };
+                  deviceManager.send(jsonEncode(map), true);
+                  timerGetting.cancel();
+                  Future.delayed(Duration(seconds: 4), (){
+                    setState(() {
+                      scanButton = true;
+                    });
+                    initTimer();
+                  });
+
+                }
+              }
+            } : null,
+            label: Text("Escanear"),
+
+          ),
+          leading: (device.wifiStatus == WifiStatus.scanning)?Container(child: CircularProgressIndicator(),height:16,width: 16,):Text(""),
           title: Text('Redes que ve el porton',style: TextStyle(color: Theme.of(context).primaryColor),),
         )
     );
 
     if (device.wifiNetworkList.isNotEmpty) {
       device.wifiNetworkList.forEach((wifiNetwork) {
-        if (device.ssid != wifiNetwork.ssid) {
+        if (device.ssid != wifiNetwork.ssid || device.wifiStatus == WifiStatus.disconnected) {
           int signal = 59648 +
               (int.parse(wifiNetwork.signalLevel!));
           ListTile listTile = ListTile(
@@ -252,8 +262,6 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
                       EnterPasswordDialog(title: wifiNetwork.ssid!));
               if (password != null) {
                 connectToWiFi(wifiNetwork, password);
-                await Future.delayed(Duration(seconds:15));
-                refresh();
               }
             },
           );
@@ -288,9 +296,9 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
                   child: Text("Paso 1 de 2"),
                 )
               ),
-              TextButton(
+              OutlinedButton(
                   child: Text(
-                      "SALTAR PASO 1"
+                      "NO CONECTAR"
                   ),
                   onPressed: (device.wifiStatus == WifiStatus.connected || device.wifiStatus == WifiStatus.disconnected)?  () async {
                     device.connectedToWiFi = false;
@@ -302,9 +310,9 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
                       "a": "get",
                     };
 
-                    messageManager.send(jsonEncode(map), true);
+                    deviceManager.send(jsonEncode(map), true);
                     await Future.delayed(Duration(milliseconds: 1000));
-                    Navigator.of(context).pushNamed("/device_configuration",
+                    Navigator.of(context).pushNamed("/change_name",
                         arguments: {
                           "create": true
                         });
@@ -322,12 +330,12 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
                       "t": "devices/" + device.mac.toUpperCase().substring(3),
                       "a": "get",
                     };
-                    messageManager.send(jsonEncode(map), true);
+                    deviceManager.send(jsonEncode(map), true);
                     timerRedirect.cancel();
                     timerRedirect = Timer.periodic(Duration(milliseconds:1), (timer) {
                       if (device.deviceStatus == DeviceStatus.updated){
                         timerRedirect.cancel();
-                        Navigator.of(context).pushNamed("/device_configuration",
+                        Navigator.of(context).pushNamed("/change_name",
                             arguments: {
                               "create": true
                             });
@@ -349,7 +357,7 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
         alignment: Alignment.bottomRight,
         child: Container(
           margin: EdgeInsets.only(right: 16),
-          child: TextButton(
+          child: ElevatedButton(
             child: Text(
                 "LISTO"
             ),
@@ -393,7 +401,7 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
         "pass": password
       }
     };
-    messageManager.send(jsonEncode(map), true);
+    deviceManager.send(jsonEncode(map), true);
   }
 
   Future<void> disconnectWiFi() async {
@@ -401,7 +409,7 @@ class _ChooseWifiPageState extends State<ChooseWifiPage> {
       "t":"devices/" + device.mac.toUpperCase().substring(3),
       "a":"disconnectw"
     };
-    messageManager.send(jsonEncode(map), true);
+    deviceManager.send(jsonEncode(map), true);
   }
 }
 

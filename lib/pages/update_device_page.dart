@@ -6,6 +6,8 @@ import 'package:open_gate/repository/models_repository.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:percent_indicator/circular_percent_indicator.dart';
+import 'package:percent_indicator/percent_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
 
@@ -16,15 +18,19 @@ class UpdateDevicePage extends StatefulWidget {
 }
 
 class _UpdateDevicePageState extends State<UpdateDevicePage> {
-
+  final _percentKey = GlobalKey();
   bool isLoaded = false;
   ModelsRepository modelsRepository = ModelsRepository();
   User user = User();
   bool magnifier = false;
   double magnifierSize = 100;
   late Timer timerOta ;
-  late MessageManager messageManager;
+  late DeviceManager deviceManager;
   late Device device;
+
+  double total = 1 ;
+  double sent = 0;
+  double remove = 10;
   
   @override
   void initState() {
@@ -42,17 +48,17 @@ class _UpdateDevicePageState extends State<UpdateDevicePage> {
       "t":"devices/" + device.mac.toUpperCase().substring(3),
       "a":"getv",
     };
-    messageManager.send(jsonEncode(map),true);
+    deviceManager.send(jsonEncode(map),true);
     await Future.delayed(Duration(milliseconds:200));
     device.deviceStatus = DeviceStatus.updating;
     map = {
       "t": "devices/" + device.mac.toUpperCase().substring(3),
       "a": "getip",
     };
-    if (await device.isConnectedLocally()) {
-      messageManager.send(jsonEncode(map), true);
+    if (await device.isSameNetwork()) {
+      deviceManager.send(jsonEncode(map), true);
     }else{
-      messageManager.send(jsonEncode(map), false);
+      deviceManager.send(jsonEncode(map), false);
     }
   }
   @override
@@ -69,8 +75,8 @@ class _UpdateDevicePageState extends State<UpdateDevicePage> {
 
   @override
   Widget build(BuildContext context) {
-    messageManager = context.watch<MessageManager>();
-    device = messageManager.selectedDevice;
+    deviceManager = context.watch<DeviceManager>();
+    device = deviceManager.selectedDevice;
 
     if(device.deviceStatus == DeviceStatus.updating) {
       isLoaded = false;
@@ -106,7 +112,7 @@ class _UpdateDevicePageState extends State<UpdateDevicePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("Version del sofware: ${device.version}\n"),
-                  Text("Última version: 1.5\n"),
+                  Text("Última version: 1.14.0\n"),
                 ]
               ),
             ),
@@ -136,41 +142,37 @@ class _UpdateDevicePageState extends State<UpdateDevicePage> {
                               .substring(3),
                           "a": "setota",
                         };
-                        messageManager.send(jsonEncode(map), true);
+                        deviceManager.send(jsonEncode(map), true);
                         timerOta.cancel();
                         timerOta = Timer.periodic(Duration(milliseconds:1), (timer) async {
                           if (device.softwareStatus == SoftwareStatus.upgrading) {
                             timerOta.cancel();
-                            await Future.delayed(Duration(milliseconds:5000));
+
                             FormData formData = new FormData.fromMap({
                             "file": await MultipartFile.fromBytes(
-                            (await rootBundle.load('assets/files/control_porton-v1.9_${device.gateType? "2":"1"}.ino.generic.bin')).buffer.asInt8List(),
-                            filename: "control_porton-v1.9_${device.gateType? "2":"1"}.ino.generic.bin"),
+                            (await rootBundle.load('assets/files/open_gate_${device.gateType?"2":"1"}.ino.generic.bin')).buffer.asInt8List(),
+                            filename: "open_gate_${device.gateType?"2":"1"}.ino.generic.bin"),
                             });
                             var dio = Dio(); // with default Options
 
                             dio.options.baseUrl = "http://${device.address}:8080/webota";
 
+                            setState(() {
+                              this.total = formData.length.toDouble();
+                            });
+
                             var response = await dio.post(
                                 "",
-                                data: formData);
+                                data: formData,onSendProgress: (int sent, int total){
+                                  updatePercent(sent,total);
+                            });
                             if (response.statusCode == 200) {
-                              device.softwareStatus != SoftwareStatus.upgraded;
+                              device.softwareStatus = SoftwareStatus.upgraded;
                               Navigator.of(context).pop();
-                              messageManager.disconnectDevice(device);
                               showDialog(context: context, builder: (_) {
                                 return AlertDialog(
                                   title: Text("Software actualizado correctamente"),
-                                  content: Text("Para terminar presiona aceptar. El porton tardara unos minutos en volver a responder, luego podra volver a conectarlo apretando en conectar. "),
-                                  actions: [
-                                    TextButton(
-                                      child: Text("ACEPTAR"),
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                      },
-                                    )
-                                  ],
-
+                                  content: Text("El porton tardara unos minutos en volver a responder, luego podra volver a conectarlo apretando en conectar. "),
                                 );
                               });
                             }
@@ -184,7 +186,7 @@ class _UpdateDevicePageState extends State<UpdateDevicePage> {
                               SnackBar(
                                   content: Text('No se pudo actualizar'),backgroundColor: Theme.of(context).errorColor),
                             );
-                            messageManager.disconnectDevice(device);
+                            deviceManager.disconnectDevice(device);
                             Navigator.of(context).pop();
                           }
                         });
@@ -195,6 +197,18 @@ class _UpdateDevicePageState extends State<UpdateDevicePage> {
                 ),
               ],
             ),
+            (device.softwareStatus == SoftwareStatus.upgrading) ?
+
+            CircularPercentIndicator(
+              key: _percentKey,
+              animationDuration: 8000,
+              animation: true,
+              radius: 60.0,
+              lineWidth: 5.0,
+              percent:(sent/total).toDouble(),
+              center: new Text("${(sent/total).toDouble() * 100}%"),
+              progressColor: Colors.green,
+            ):
             (device.softwareStatus == SoftwareStatus.upgrading)?Text("Por favor espere a que el porton se actualice correctamente, esto aveces puede fallar"):Container()
 
 
@@ -202,5 +216,15 @@ class _UpdateDevicePageState extends State<UpdateDevicePage> {
         ),
       ),
     );
+  }
+  updatePercent(int sent, int total ){
+    Future.delayed(Duration(milliseconds: 2000),(){
+      remove = remove - 1;
+      setState(() {
+        this.total = total.toDouble();
+        this.sent = (sent.toDouble() / 10);
+        print("Sent: $sent total: $total");
+      });
+    });
   }
 }
