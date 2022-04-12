@@ -29,15 +29,19 @@ enum WifiStatus{
   scanning,
   getting
 }
+class Request {
+  final String message;
+  String response = "";
+  bool received = false;
+  bool timeElapsed = false;
 
+  Request({required this.message}){}
 
+}
 class Device {
   int? id;
-
   String version = "1.1.1";
-
   String name = "";
-
   bool connectedToWiFi = false;
   String ssid = "";
   String address;
@@ -49,13 +53,15 @@ class Device {
   int dayTimer ;
   int nightTimer;
   bool gateType;
-
   bool serverConnected = false;
   ModelsRepository modelsRepository = ModelsRepository();
+
   SoftwareStatus softwareStatus = SoftwareStatus.upgraded;
   ConnectionStatus connectionStatus = ConnectionStatus.disconnected;
   DeviceStatus deviceStatus = DeviceStatus.updated;
   WifiStatus wifiStatus = WifiStatus.disconnected;
+
+  List<Request> requests = [];
 
   late Timer timerUpdateDeviceConnection;
   int numberOfDisconnections = 3;
@@ -95,6 +101,32 @@ class Device {
 
   }
 
+  Request addRequest(String message){
+    Request request = Request(message: message);
+    if (requests.length != 60){
+      requests.insert(0,
+          request
+      );
+    }else{
+      requests[3] = requests[2];
+      requests[2] = requests[1];
+      requests[1] = requests[0];
+      requests[0] = request;
+    }
+    try {
+      Future.delayed(Duration(seconds: 3), () {
+        request.timeElapsed = true;
+      });
+    }catch(e){}
+    try {
+      Future.delayed(Duration(seconds: 5),(){
+        requests.remove(request);
+      });
+    }catch(e){}
+
+    return request;
+  }
+
   Future<bool> isSameNetwork() async {
     bool connected = false;
     WifiConfiguration wifiConfiguration = WifiConfiguration();
@@ -117,6 +149,17 @@ class Device {
     try {
       Map <String, dynamic> map = json.decode(message);
       if (map["t"] == "devices/${mac.toUpperCase().substring(3)}") {
+        for(var i = requests.length - 1;i >= 0;i--){
+          Map <String, dynamic> mapRe = json.decode(requests[i].message);
+          print("$i request");
+          if (mapRe["a"] == map["a"] && !requests[i].timeElapsed && !requests[i].received){
+            print("Nashhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh");
+            requests[i].received = true;
+            requests[i].response = map["a"];
+            break;
+          }
+        }
+
         deviceStatus = DeviceStatus.updated;
         print("json: $map");
         switch (map["a"]) {
@@ -129,6 +172,7 @@ class Device {
             print("Ip: ${map["d"]["ip"]}");
             this.address = map["d"]["ip"] ;
             break;
+
           case "getmqtt":
             print("Mqtt: ${map["d"]["m"]}");
             serverConnected = (map["d"]["m"] == 1)? true : false;

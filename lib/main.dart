@@ -51,7 +51,6 @@ class _MyApp extends State<MyApp> {
       highContrastTheme: CustomTheme.lightTheme,
       darkTheme: CustomTheme.darkTheme,
       onGenerateRoute: RouteGenerator.generateRoute,
-
     );
   }
 

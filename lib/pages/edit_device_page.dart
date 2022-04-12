@@ -75,6 +75,30 @@ class _EditDevicePageState extends State<EditDevicePage> {
         }else{
           deviceManager.send(jsonEncode(map), false);
         }
+
+        await Future.delayed(Duration(milliseconds:200));
+        device.deviceStatus = DeviceStatus.updating;
+        map = {
+          "t": "devices/" + device.mac.toUpperCase().substring(3),
+          "a": "getutc",
+        };
+        if (await device.isSameNetwork()) {
+          deviceManager.send(jsonEncode(map), true);
+        }else{
+          deviceManager.send(jsonEncode(map), false);
+        }
+
+        await Future.delayed(Duration(milliseconds:200));
+        device.deviceStatus = DeviceStatus.updating;
+        map = {
+          "t": "devices/" + device.mac.toUpperCase().substring(3),
+          "a": "gettimers",
+        };
+        if (await device.isSameNetwork()) {
+          deviceManager.send(jsonEncode(map), true);
+        }else{
+          deviceManager.send(jsonEncode(map), false);
+        }
       }
       await Future.delayed(Duration(seconds: 1));
       if (device.connectionStatus == ConnectionStatus.local) {
@@ -266,7 +290,12 @@ class _EditDevicePageState extends State<EditDevicePage> {
                           if (result != null){
                             if (result){
                               modelsRepository.deleteDevice(device: device).then((_) async {
-                                await deviceManager.updateDevices();
+                                deviceManager.update(updateWifi: false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text("Se ha olvidado el porton '${device.name}'")),
+                                );
+
                                 Navigator.of(context).pop();
                               });
                             }

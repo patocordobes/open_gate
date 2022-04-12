@@ -104,12 +104,6 @@ class _DevicePageState extends State<DevicePage> {
     }else{
       isLoaded = true;
     }
-
-
-
-
-
-
     return Scaffold(
       appBar: AppBar(
         title: Text('${device.name }'),
@@ -120,12 +114,48 @@ class _DevicePageState extends State<DevicePage> {
           }),
         ],
       ),
-      body:  SafeArea(
-        child: Row(
-          children:getButtons(),
+      body:  SingleChildScrollView(
+        child: Column(
+          children: [
+
+            SafeArea(
+              child: Row(
+                children:getButtons(),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+
+                children: getRequests(),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+  List<Widget> getRequests(){
+    List<Widget> list = [];
+    device.requests.forEach((request) {
+      list.add(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("${(request.received)?"Recibido ":(request.timeElapsed)? "No se envio ": "Enviando... "}",style: TextStyle(fontSize: 20)),
+            (request.received)?
+            Icon(Icons.check, color: Colors.green,):
+              (request.timeElapsed)?
+            Icon(Icons.error, color: Colors.red): Container(child: CircularProgressIndicator(),height:16,width: 16),
+          ],
+        )
+      );
+      list.add(
+        Divider()
+      );
+    });
+    return list ;
   }
   List<Widget> getButtons(){
     List<Widget> buttons = [];
@@ -147,6 +177,17 @@ class _DevicePageState extends State<DevicePage> {
                     "t":"devices/" + device.mac.toUpperCase().substring(3),
                     "a":"set1",
                   };
+                  Request request = device.addRequest(jsonEncode(map));
+                  Future.delayed(Duration(seconds: 3),(){
+                    setState(() {
+                      request.timeElapsed = true;
+                    });
+                  });
+                  Future.delayed(Duration(seconds: 5),(){
+                    setState(() {
+                      device.requests.remove(request);
+                    });
+                  });
                   if (device.connectionStatus == ConnectionStatus.local) {
                     deviceManager.send(jsonEncode(map),true);
                   }else{
@@ -180,6 +221,17 @@ class _DevicePageState extends State<DevicePage> {
                       "t":"devices/" + device.mac.toUpperCase().substring(3),
                       "a":"set2",
                     };
+                    Request request = device.addRequest(jsonEncode(map));
+                    Future.delayed(Duration(seconds: 3),(){
+                      setState(() {
+                        request.timeElapsed = true;
+                      });
+                    });
+                    Future.delayed(Duration(seconds: 5),(){
+                      setState(() {
+                        device.requests.remove(request);
+                      });
+                    });
                     if (device.connectionStatus == ConnectionStatus.local) {
                       deviceManager.send(jsonEncode(map),true);
                     }else{

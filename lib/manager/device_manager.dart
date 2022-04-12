@@ -19,9 +19,7 @@ enum ManagerStatus{
 }
 class DeviceManager with ChangeNotifier {
   late MqttServerClient mqttClient;
-  late UDP udpReceiver;
-  late UDP _udpReceiverForNew;
-  late UDP _udpSenderForNew;
+  late UDP _udpReceiver;
   late UDP _udpSender;
   ManagerStatus status = ManagerStatus.stopped;
   List<Device> _devices = [];
@@ -55,84 +53,49 @@ class DeviceManager with ChangeNotifier {
     return wifiNetworkList;
   }
 
-  Future<void> updateDevices() async {
+  Future<void> selectDevicesFromRepository() async {
     ModelsRepository modelsRepository = ModelsRepository();
     _devices = await modelsRepository.getDevices();
-    notifyListeners();
   }
   void update({required bool updateWifi}) async {
-    if (status == ManagerStatus.started || status == ManagerStatus.updated) {
-      status = ManagerStatus.updating ;
+    status = ManagerStatus.updating ;
+    notifyListeners();
+    ModelsRepository modelsRepository = ModelsRepository();
+    var devices = await modelsRepository.getDevices();
+    if (devices.length != _devices.length){
+      _devices = devices;
+    }
 
-      notifyListeners();
-      if (updateWifi) {
-        scannedDevices = [];
-
-        List<WifiNetwork> wifiNetworkList = await getWifiList();
-
-
-        wifiNetworkList.forEach((wifi){
-          scannedDevices.add(Device(mac:wifi.bssid!,name: wifi.ssid!));
-        });
-        notifyListeners();
-      }
-      try {
-        if (mqttClient.connectionStatus!.state != MqttConnectionState.connected) {
-
-          mqttClient = await connectToMQTT();
-          if (mqttClient.connectionStatus!.state ==
-              MqttConnectionState.connected) {
-            _devices.forEach((device) {
-
-              String topic = 'controlgates/devices/' + device.mac.toUpperCase().substring(3); // Not a wildcard topic
-              mqttClient.subscribe(topic, MqttQos.atMostOnce);
-            });
-            listenMqtt();
-          }
-
-        }
-      }catch (e){
-        mqttClient = await connectToMQTT();
-      }
-      if (udpReceiver.closed) {
-
-        listenUDP();
-        print("udp inited");
-      }
-
-      status = ManagerStatus.updated;
+    if (updateWifi) {
+      scannedDevices = [];
+      List<WifiNetwork> wifiNetworkList = await getWifiList();
+      wifiNetworkList.forEach((wifi){
+        scannedDevices.add(Device(mac:wifi.bssid!,name: wifi.ssid!));
+      });
       notifyListeners();
     }
+    mqttClient = await connectToMQTT(_devices);
+    listenMqtt();
+
+
+
+    if (_udpReceiver.closed) {
+      listenUDP();
+      print("udp inited");
+    }
+    status = ManagerStatus.updated;
+    notifyListeners();
   }
   void start() async {
 
     if (status == ManagerStatus.stopped) {
-
       status = ManagerStatus.starting;
-      udpReceiver = await UDP.bind(Endpoint.any(port: Port(8890)));
-      ModelsRepository modelsRepository = ModelsRepository();
-      _devices = await modelsRepository.getDevices();
+
+      _udpReceiver = await UDP.bind(Endpoint.any(port: Port(8890)));
+      await selectDevicesFromRepository();
       notifyListeners();
-
-      try {
-        if (mqttClient.connectionStatus!.state != MqttConnectionState.connected) {
-
-          mqttClient = await connectToMQTT();
-          if (mqttClient.connectionStatus!.state ==
-              MqttConnectionState.connected) {
-            _devices.forEach((device) {
-
-              String topic = 'controlgates/devices/' + device.mac.toUpperCase().substring(3); // Not a wildcard topic
-              mqttClient.subscribe(topic, MqttQos.atMostOnce);
-            });
-            listenMqtt();
-          }
-
-        }
-      }catch (e){
-        mqttClient = await connectToMQTT();
-      }
-
+      mqttClient = await connectToMQTT(_devices);
+      listenMqtt();
       listenUDP();
       updateDevicesConnection();
       status = ManagerStatus.started;
@@ -143,9 +106,10 @@ class DeviceManager with ChangeNotifier {
   Future<void> stop() async {
     if (status != ManagerStatus.stopped || status == ManagerStatus.started) {
       _udpSender.close();
-      udpReceiver.close();
+      _udpReceiver.close();
       mqttClient.disconnect();
       status = ManagerStatus.stopped;
+      notifyListeners();
     }
   }
 
@@ -164,9 +128,9 @@ class DeviceManager with ChangeNotifier {
   }
   Future<void> updateDevicesConnection() async {
     status = ManagerStatus.updating;
-    for (int i = 0;i < getDevices.length;i++) {
+    for (int i = 0;i < _devices.length;i++) {
 
-      Device device = getDevices[i];
+      Device device = _devices[i];
       if (device.connectionStatus != ConnectionStatus.disconnected) {
         if (device.connectionStatus != ConnectionStatus.connecting) {
           device.connectionStatus = ConnectionStatus.updating;
@@ -295,7 +259,7 @@ class DeviceManager with ChangeNotifier {
       print(
           'EXAMPLE::Change notification:: topic is <${c[0]
               .topic}>, payload is <-- $pt -->');
-      getDevices.forEach((device) {
+      _devices.forEach((device) {
         device.listen(pt,local:false);
       });
 
@@ -303,10 +267,10 @@ class DeviceManager with ChangeNotifier {
     });
   }
   void listenUDP() async  {
-    udpReceiver = await UDP.bind(Endpoint.any(port: Port(8890)));
-    udpReceiver.asStream(timeout: Duration(hours: 1)).listen((datagram) {
+    _udpReceiver = await UDP.bind(Endpoint.any(port: Port(8890)));
+    _udpReceiver.asStream(timeout: Duration(hours: 1)).listen((datagram) {
       var str = String.fromCharCodes(datagram!.data);
-      getDevices.forEach((device){
+      _devices.forEach((device){
         device.listen(str,address: datagram.address.address,local:true);
       });
       scannedDevices.forEach((device){
@@ -324,7 +288,7 @@ class DeviceManager with ChangeNotifier {
 
         if (response.statusCode == 200) {
           print(response.body);
-          getDevices.forEach((device){
+          _devices.forEach((device){
             device.listen(response.body,local:true);
           });
           scannedDevices.forEach((device){
@@ -333,13 +297,8 @@ class DeviceManager with ChangeNotifier {
           notifyListeners();
 
         }else{
-          print(response.body);
-          print("no se envio nadaasdklñfjasñldkfjasñ");
         }
-      },onError: (e){
-
-          print(e);
-      });
+      },onError: (e){});
       _udpSender = await UDP.bind(Endpoint.broadcast(port: Port(8888)));
       var dataLength = await _udpSender.send(
           message.codeUnits, Endpoint.broadcast(port: Port(8888)));
@@ -372,10 +331,10 @@ class DeviceManager with ChangeNotifier {
 
 }
 
-Future<MqttServerClient> connectToMQTT() async {
+Future<MqttServerClient> connectToMQTT(List<Device> devices) async {
 
   MqttServerClient client = MqttServerClient.withPort('appdinamico3.com', 'psironi', 1883);
-  client.logging(on: true);
+  client.logging(on: false);
   client.onConnected = onConnected;
   client.onDisconnected = onDisconnected;
   client.onUnsubscribed = onUnsubscribed;
@@ -400,6 +359,11 @@ Future<MqttServerClient> connectToMQTT() async {
   if (client.connectionStatus!.state != MqttConnectionState.connected) {
     client.disconnect();
   }
+  devices.forEach((device) {
+
+    String topic = 'controlgates/devices/' + device.mac.toUpperCase().substring(3); // Not a wildcard topic
+    client.subscribe(topic, MqttQos.atMostOnce);
+  });
   return client;
 }
 

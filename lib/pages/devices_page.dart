@@ -48,7 +48,6 @@ class _DevicesPageState extends State<DevicesPage> {
     updateMqtt.cancel();
     updateDevicesConnection.cancel();
     initTimer();
-    deviceManager.updateDevices();
   }
   @override
   void dispose() {

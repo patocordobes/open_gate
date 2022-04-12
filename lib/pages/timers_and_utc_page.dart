@@ -147,9 +147,10 @@ class _TimersUtcPageState extends State<TimersUtcPage> {
                   padding: EdgeInsets.only(right: 16,left: 16),
                   child: Row(
                     children: [
+                      Expanded(child:Container()),
                       ElevatedButton(
                         child: Text(
-                            "GUARDAR porton"
+                            "GUARDAR"
                         ),
                         onPressed: (device.deviceStatus != DeviceStatus.updated)? null :  () async {
                           if (_formKey.currentState!.validate()) {

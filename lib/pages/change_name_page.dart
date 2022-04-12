@@ -162,7 +162,6 @@ class _ChangeNamePageState extends State<ChangeNamePage> {
                                 if (widget.create) {
                                   modelsRepository.createDevice(
                                       device: device).then((value) {
-                                    deviceManager.updateDevices();
                                     ScaffoldMessenger.of(context)
                                         .showSnackBar(
                                       SnackBar(content: Text(
@@ -170,7 +169,7 @@ class _ChangeNamePageState extends State<ChangeNamePage> {
                                           backgroundColor: Colors.green),
                                     );
 
-                                    deviceManager.udpReceiver.close();
+
                                     deviceManager.update(updateWifi: true);
                                     Navigator.of(context).pushNamedAndRemoveUntil("/devices", (route) => false);
                                     

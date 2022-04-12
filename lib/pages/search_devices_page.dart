@@ -69,13 +69,10 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
 
   void refresh() async {
     await Future.delayed(Duration(seconds:1),);
-
     wifiConfiguration = WifiConfiguration();
-    deviceManager.udpReceiver.close();
+    await wifiConfiguration.connectToWifi("", "", "");//TODO descomennatar esto para la release
     deviceManager.update(updateWifi: true);
-    deviceManager.status = ManagerStatus.updating ;
-    deviceManager.notifyListeners();
-    wifiConfiguration.connectToWifi("", "", ""); //TODO descomennatar esto para la release
+
 
   }
   @override
@@ -226,24 +223,54 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
             var statusCamera = await Permission.camera.request();
             var statusStorage = await Permission.storage.request();
             if (statusStorage.isGranted && statusCamera.isGranted){
-              String? cameraScanResult = await scanner.scan();
-
-              Map<String, dynamic> map = jsonDecode(cameraScanResult!);
               try{
-                Device device = Device.fromQRCode(map);
-                modelsRepository.createDevice(device: device).then((value) {});
-                Navigator.of(context).pop();
-                showDialog(context: context, builder: (_) {
+                String? cameraScanResult = await scanner.scan();
+                Map<String, dynamic> map = jsonDecode(cameraScanResult!);
 
-
-                  return AlertDialog(
-                    title: Text("Porton '${device.name}' agregado exitosamente"),
-                    content: SingleChildScrollView(
-                      child: Text(
-                          "Ahora ya puedes utilizar el porton que acabas de escanear"),
-                    ),
-                  );
+                Device newDevice = Device.fromQRCode(map);
+                bool exists = false;
+                deviceManager.getDevices.forEach((device){
+                  if (newDevice.mac == device.mac){
+                    exists = true;
+                  }
                 });
+                if (!exists) {
+                  modelsRepository.createDevice(device: newDevice).then((
+                      value) {});
+                  Navigator.of(context).pop();
+                  showDialog(context: context, builder: (_) {
+                    return AlertDialog(
+                      title: Text(
+                          "Porton '${newDevice.name}' agregado exitosamente"),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            Icon(Icons.check, size: 50,color: Colors.green,),
+                            Text(
+                                "Ahora ya puedes utilizar el porton que acabas de escanear"),
+                          ],
+                        ),
+                      ),
+                    );
+                  });
+                }else{
+                  showDialog(context: context, builder: (_) {
+                    return AlertDialog(
+                      title:Text(
+                        "Porton '${newDevice.name}' Ya se a agragdo anteriormente",
+                      ),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            Icon(Icons.warning, size: 50,color: Colors.red),
+                            Text(
+                                "Ya lo puedes ver en la seccion de portones"),
+                          ],
+                        ),
+                      ),
+                    );
+                  });
+                }
 
               }catch(e){
                 showDialog(context: context, builder: (_) {
@@ -252,8 +279,13 @@ class _SearchDevicesPageState extends State<SearchDevicesPage> with WidgetsBindi
                   return AlertDialog(
                     title: Text("No se apodido agregar el porton"),
                     content: SingleChildScrollView(
-                      child: Text(
-                          "El codigo que has escaneado no es valido o la version de la app no corresponde con el codigo qr"),
+                      child: Column(
+                        children: [
+                          Icon(Icons.error, size: 50,color: Colors.red),
+                          Text(
+                              "El codigo que has escaneado no es valido o la version de la app no corresponde con el codigo qr"),
+                        ],
+                      ),
                     ),
                   );
                 });
