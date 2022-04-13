@@ -57,7 +57,7 @@ class DeviceManager with ChangeNotifier {
     ModelsRepository modelsRepository = ModelsRepository();
     _devices = await modelsRepository.getDevices();
   }
-  void update({required bool updateWifi}) async {
+  void update({required bool updateWifi, bool updateMqtt = false}) async {
     status = ManagerStatus.updating ;
     notifyListeners();
     ModelsRepository modelsRepository = ModelsRepository();
@@ -74,11 +74,10 @@ class DeviceManager with ChangeNotifier {
       });
       notifyListeners();
     }
-    mqttClient = await connectToMQTT(_devices);
-    listenMqtt();
-
-
-
+    if(updateMqtt) {
+      mqttClient = await connectToMQTT();
+      listenMqtt();
+    }
     if (_udpReceiver.closed) {
       listenUDP();
       print("udp inited");
@@ -94,7 +93,7 @@ class DeviceManager with ChangeNotifier {
       _udpReceiver = await UDP.bind(Endpoint.any(port: Port(8890)));
       await selectDevicesFromRepository();
       notifyListeners();
-      mqttClient = await connectToMQTT(_devices);
+      mqttClient = await connectToMQTT();
       listenMqtt();
       listenUDP();
       updateDevicesConnection();
@@ -327,70 +326,69 @@ class DeviceManager with ChangeNotifier {
     newDevice = device;
     notifyListeners();
   }
+  Future<MqttServerClient> connectToMQTT() async {
 
+    MqttServerClient client = MqttServerClient.withPort('appdinamico3.com', 'psironi', 1883);
+    client.logging(on: false);
+    client.onConnected = onConnected;
+    client.onDisconnected = onDisconnected;
+    client.onUnsubscribed = onUnsubscribed;
+    client.onSubscribed = onSubscribed;
+    client.onSubscribeFail = onSubscribeFail;
+    client.pongCallback = pong;
 
-}
-
-Future<MqttServerClient> connectToMQTT(List<Device> devices) async {
-
-  MqttServerClient client = MqttServerClient.withPort('appdinamico3.com', 'psironi', 1883);
-  client.logging(on: false);
-  client.onConnected = onConnected;
-  client.onDisconnected = onDisconnected;
-  client.onUnsubscribed = onUnsubscribed;
-  client.onSubscribed = onSubscribed;
-  client.onSubscribeFail = onSubscribeFail;
-  client.pongCallback = pong;
-  client.keepAlivePeriod = 6000;
-  final connMessage = MqttConnectMessage()
-      .authenticateAs('psironi', 'Queiveephai6')
-
-      .withWillTopic('willtopic')
-      .withWillMessage('Will message')
-      .startClean()
-      .withWillQos(MqttQos.atLeastOnce);
-  client.connectionMessage = connMessage;
-  try {
-    await client.connect();
-  } catch (e) {
-    print('Exception: $e');
-    client.disconnect();
+    final connMessage = MqttConnectMessage()
+        .authenticateAs('psironi', 'Queiveephai6')
+        .withWillTopic('willtopic')
+        .withWillMessage('Will message')
+        .startClean()
+        .withWillQos(MqttQos.atLeastOnce);
+    client.connectionMessage = connMessage;
+    try {
+      await client.connect();
+    } catch (e) {
+      print('Exception: $e');
+      client.disconnect();
+    }
+    if (client.connectionStatus!.state != MqttConnectionState.connected) {
+      client.disconnect();
+    }
+    return client;
   }
-  if (client.connectionStatus!.state != MqttConnectionState.connected) {
-    client.disconnect();
+
+  void onConnected() {
+    print('Connected');
+    Future.delayed(Duration(seconds: 1), (){
+      _devices.forEach((device) {
+
+        String topic = 'controlgates/devices/' + device.mac.toUpperCase().substring(3); // Not a wildcard topic
+        mqttClient.subscribe(topic, MqttQos.atMostOnce);
+      });
+    });
   }
-  devices.forEach((device) {
-
-    String topic = 'controlgates/devices/' + device.mac.toUpperCase().substring(3); // Not a wildcard topic
-    client.subscribe(topic, MqttQos.atMostOnce);
-  });
-  return client;
-}
-
-void onConnected() {
-  print('Connected');
-}
 
 // unconnected
-void onDisconnected() {
-  print('Disconnected');
-}
+  void onDisconnected() {
+    update(updateWifi: false,updateMqtt: true);
+  }
 
 // subscribe to topic succeeded
-void onSubscribed(String topic) {
-  print('Subscribed topic: $topic');
-}
+  void onSubscribed(String topic) {
+    print('Subscribed topic: $topic');
+  }
 
 // subscribe to topic failed
-void onSubscribeFail(String topic) {
-  print('Failed to subscribe $topic');
-}
+  void onSubscribeFail(String topic) {
+    print('Failed to subscribe $topic');
+  }
 
 // unsubscribe succeeded
-void onUnsubscribed(String? topic) {
-  print('Unsubscribed topic: $topic');
-}
+  void onUnsubscribed(String? topic) {
+    print('Unsubscribed topic: $topic');
+  }
 // PING response received
-void pong() {
-  print('Ping response client callback invoked');
+  void pong() {
+    print('Ping response client callback invoked');
+  }
 }
+

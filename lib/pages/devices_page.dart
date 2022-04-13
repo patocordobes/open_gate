@@ -23,14 +23,14 @@ class _DevicesPageState extends State<DevicesPage> {
   bool isLoaded = false;
   late DeviceManager deviceManager;
   late Timer updateDevicesConnection;
-  late Timer updateMqtt;
+  late Timer timerUpdate;
   late Timer timerRedirect;
 
   void initTimer(){
     updateDevicesConnection = Timer.periodic(Duration(seconds: 40), (t) {
       deviceManager.updateDevicesConnection();
     });
-    updateMqtt = Timer.periodic(Duration(seconds:5),(t){
+    timerUpdate = Timer.periodic(Duration(seconds:5),(t){
       deviceManager.update(updateWifi: false);
     });
   }
@@ -45,14 +45,14 @@ class _DevicesPageState extends State<DevicesPage> {
 
   }
   void refresh(){
-    updateMqtt.cancel();
+    timerUpdate.cancel();
     updateDevicesConnection.cancel();
     initTimer();
   }
   @override
   void dispose() {
     super.dispose();
-    updateMqtt.cancel();
+    timerUpdate.cancel();
     updateDevicesConnection.cancel();
     deviceManager.stop();
   }
